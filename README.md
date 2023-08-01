@@ -1,6 +1,6 @@
 # CogniVox-Companion Discord Bot
 
-CogniVox-Companion is an advanced AI-powered Discord bot that acts as your intelligent conversational companion. It leverages state-of-the-art natural language processing (NLP) capabilities provided by langchain for text processing and comprehension. The oogabooga webui API is utilized for powerful text generation, allowing the bot to engage in text-based and voice-based conversations across multiple chat platforms, including Discord and Telegram.
+CogniVox-Companion is an advanced AI-powered Discord bot that acts as your intelligent conversational companion. It leverages state-of-the-art natural language processing (NLP) capabilities provided by langchain for text processing and comprehension. The oogabooga webui API is utilized for powerful text generation, allowing the bot to engage in text-based and voice-based conversations through discord. It is planned to add Telegram in the future.
 
 ## Features
 
@@ -13,6 +13,13 @@ CogniVox-Companion is an advanced AI-powered Discord bot that acts as your intel
 - Long-term Memory: CogniVox-Companion possesses a vector-based long-term memory through langchain, allowing it to remember context and prior interactions for more coherent conversations.
 
 - Summarizing Memory: The bot can summarize lengthy discussions, providing concise responses to complex inquiries.
+
+#  Tested Platform
+
+CogniVox-Companion has been tested on Linux. As the only development platform, it is most stable and well-supported on Linux systems. However, please note that it should work Windows but it was never testet. 
+
+Note: CogniVox-Companion is designed and supported for use on Linux only. Usage on other platforms is not supported and may result in unexpected behavior.
+
 
 ## Getting Started
 
