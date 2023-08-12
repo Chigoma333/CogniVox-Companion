@@ -8,7 +8,7 @@ CogniVox-Companion is an advanced AI-powered Discord bot that acts as your intel
 
 - Voice-to-Text Communication: Send audio files with your voice recordings, and the bot will accurately transcribe and respond to your messages.
 
-- Text-to-Speech (TTS) Synthesis: Receive responses as both text and audio files with the bot's speech synthesis feature, powered by the oogabooga webui API.
+- Text-to-Speech (TTS) Synthesis: Receive responses as both text and audio files with the bot's speech synthesis feature.
 
 - Long-term Memory: CogniVox-Companion possesses a vector-based long-term memory through langchain, allowing it to remember context and prior interactions for more coherent conversations.
 
@@ -23,17 +23,61 @@ Note: CogniVox-Companion is designed and supported for use on Linux only. Usage 
 
 ## Getting Started
 
-to be done
+1. Install https://github.com/oobabooga/text-generation-webui and start it with --api
+
+2. Clone the repository:
+   ```sh
+   git clone https://github.com/Chigoma333/CogniVox-Companion
+   cd your-project
+   ```
+
+3. Install system-level dependencies using pacman or apt:
+    ```sh
+    sudo pacman -S opus
+    ```
+    or
+    ```sh
+    sudo apt-get install libopus0 opus-tools
+    ```
+4. Install Python packages from requirements.txt:
+
+    ```sh
+    pip install -r requirements.txt
+    ```
+
+5. Rename .sampleenv to .env, add your discord token and add your oogabooga api
+
+6. Depending on what LLM you use change the template inside oogabooga.py
+
+7. Run the bot
+   ```sh
+   python3 main.py
+   ```
 
 ## Usage
 
-to be done
+Invite the Bot into your discord server and chat with it
 
 ## Commands
 
-- `/help`: Display the list of available commands and their usage.
+- `/help`: Display the list of available commands.
 
-- `/info`: Displays more information on how it works and the Comments.
+- `/info`: Show all commands and other information.
+
+- `/join`: Join a voice channel.
+
+- `/leave `: Leave the current voice channel.
+
+- `/delete_short_mem`: Deletes shortterm memory directory. (Requires manage channels permission)
+
+
+- `/generate_bark_test <text>`: Generate audio from text using the Bark TTS model.
+
+
+- `/generate_tortoise_test <text>`: Generate audio from text using the Tortoise TTS model.
+
+
+- `/generate_whisper_test <audio_file>`: Generate text from audio using the Whisper.
 
 ## Warning: Shared Memory
 
@@ -41,7 +85,7 @@ CogniVox-Companion utilizes shared memory for long-term context and personalized
 
 # Warning: Resource Usage
 
-CogniVox-Companion runs entirely locally on your server to ensure data privacy. However, please be aware that the bot may consume significant resources. On average, it uses up to 10GB of RAM and 4GB of VRAM, especially during memory-intensive tasks such as text generation. Make sure your server can handle these resource requirements to avoid performance issues.
+CogniVox-Companion runs entirely locally on your server to ensure data privacy. However, please be aware that the bot may consume significant resources. On average, it uses up to 10GB of VRAM, especially during memory-intensive tasks such as text generation. Make sure your server can handle these resource requirements to avoid performance issues.
 
 ## Feedback and Support
 
@@ -51,6 +95,15 @@ For feedback, suggestions, or bug reports, please use the github issues feature
 
 I welcome contributions from the community.
 
+## Thanks to
+
+- pycord - https://github.com/Pycord-Development/pycord 
+- bark - https://github.com/suno-ai/bark
+- tortoise-tts - https://github.com/neonbjb/tortoise-tts
+- whisper - https://github.com/openai/whisper
+- text-generation-webui - https://github.com/oobabooga/text-generation-webui
+- langchain - https://github.com/langchain-ai/langchain
+
 ## License
 
-to be done
+This project is licensed under the [GPL-3.0](LICENSE) License - see the [LICENSE](LICENSE) file for details.
