@@ -1,0 +1,41 @@
+Commands:
+/join - Join a voice channel.
+/leave - Leave the current voice channel.
+/info - Show all commands and other information.
+/delete_short_mem - Deletes shortterm memory directory. (Requires manage channels permission)
+/reboot - Reboot the bot. (Requires manage channels permission)
+/help - Show help.
+/generate_bark_test <text> - Generate audio from text using the Bark TTS model.
+/generate_tortoise_test <text> - Generate audio from text using the Tortoise TTS model.
+/generate_whisper_test <audio_file> - Generate text from audio using the Whisper.
+
+
+Description:
+This bot is designed to perform various actions related to voice channels and text messages. Here's a brief overview of the available commands:
+
+/join <channel_name> - Instructs the bot to join the specified voice channel. If no channel name is provided, the bot joins the voice channel of the user issuing the command.
+
+/leave - Orders the bot to leave the voice channel it is currently connected to.
+
+/info - Displays a message containing all available commands and additional information about the bot. (This Text)
+
+/delete_short_mem - Deletes files located in the "shortmem" directory. This command is intended to clear short-term memory. (Requires manage channels permission)
+
+/reboot - Restarts the bot. This command is useful for performing a bot reboot. (Requires manage channels permission)
+
+/help - Provides a list of commands and their descriptions.
+
+/generate_bark_test <text> - Generates audio from the provided text using the Bark TTS model. If no text is provided, a default test message will be used.
+
+/generate_tortoise_test <text> - Generates audio from the provided text using the Tortoise TTS model. If no text is provided, a default test message will be used.
+
+/generate_whisper_test <audio_file> - Transcribes text from the provided audio file using the Whisper ASR model. Only works with audio files. (Requires the Whisper ASR model and properly formatted audio files in the "voices" directory)
+
+Functionality:
+When the bot is active and receives messages in any accessible channel, it processes the message using the `on_message` function. If the message contains an audio file, the bot transcribes the audio using the Whisper ASR model. Afterward, the bot starts a time-consuming task asynchronously using the `generate_llm_thread` function. During this task, it uses the initialized language model to generate a response based on the message content.
+
+Additionally, there are commands to manage voice channels and perform text-to-speech operations. The bot also supports generating audio from text using the Bark and Tortoise TTS models. Please note that some commands might require specific permissions to function correctly in your Discord server. When the bot is connected to a voice channel it will play the audio
+
+Feel free to experiment with the bot and its various functionalities! 
+
+If you encounter any issues while using the bot or have suggestions for improvements, please feel free to report them on the [GitHub Issues](https://github.com/Chigoma333/CogniVox-Companion/issues) page. Your feedback is valuable and will help make the bot even better!
