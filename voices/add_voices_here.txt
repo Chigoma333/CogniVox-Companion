@@ -1,0 +1,1 @@
+ create a new directory with the voice name and put 3-5 .wav files with voice sample in it length 10-20 sec
