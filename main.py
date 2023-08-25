@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord.utils import get
 import argparse
 
 from concurrent.futures import ThreadPoolExecutor
@@ -12,8 +13,10 @@ import sys
 # Import custom functions from the oogabooga library
 from oogabooga import init_llm, generate_llm
 from speech2text import init_whisper, generate_whisper
-from text2speech import init_bark, generate_bark, init_tortoise, generate_tortoise
+from text2speech import init_bark, generate_bark, init_tortoise, generate_tortoise, audio_combine
 
+import tempfile
+from tortoise.utils.text import split_and_recombine_text
 
 running_task_llm = False
 running_task_tts = False
@@ -69,7 +72,7 @@ if use_bark == "1":
     init_bark(bark_use_small_model)
 
 if use_tortoise == "1":
-    tortoise_tts = init_tortoise(tortoise_use_deepspeed, tortoise_kv_cache, tortoise_half)
+    tortoise_tts = init_tortoise(tortoise_use_deepspeed, tortoise_kv_cache, tortoise_half, tortoise_num_autoregressive_samples)
 
 bot = discord.Bot(intents=intents)
 connectet_voice_channel = None
@@ -121,6 +124,8 @@ async def on_message(message):
     
     if (message.content == None or message.content == "") and message.attachments == None:
         return
+    
+
 
     print("Nachricht von " + str(message.author) + " enthält " + message.content)
 
@@ -253,17 +258,42 @@ async def generate_tts_thread(text):
     # This prevents the event loop from being blocked during the time-consuming task
     with ThreadPoolExecutor() as executor:
         if use_tortoise == "1":
-            result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
+            #result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
+            texts = split_and_recombine_text(text)
+            audio_parts = []
+            for text in texts:
+                result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
+                await play_audio(result)
+                audio_parts.append(result)
+
+            result = audio_combine(audio_parts)
+
+
 
         if use_bark == "1":
             result = await bot.loop.run_in_executor(executor, generate_bark, text, bark_speaker)
+            await play_audio(result)
 
+        
+    running_task_tts = False
+    return result
+
+audio_queue = []
+
+async def play_audio(audio_file):
+    global connectet_voice_channel
+    global audio_queue
+    
+    audio_queue.append(audio_file)
+    
     if connectet_voice_channel != None:
         while connectet_voice_channel.is_playing():
             await asyncio.sleep(1)
-        connectet_voice_channel.play(discord.FFmpegPCMAudio(result))
-    running_task_tts = False
-    return result
+        
+        audio_file = audio_queue.pop(0)
+        connectet_voice_channel.play(discord.FFmpegPCMAudio(audio_file))
+        
+
 
 
 bot.run(discord_token)

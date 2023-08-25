@@ -1,11 +1,11 @@
 from bark import SAMPLE_RATE, generate_audio, preload_models
 from scipy.io.wavfile import write as write_wav
+import tempfile
 
 import torch
 import torchaudio
 from tortoise.api import TextToSpeech
 from tortoise.utils.audio import load_voice
-from tortoise.utils.text import split_and_recombine_text
 
 
 
@@ -21,32 +21,39 @@ def generate_bark(text_prompt, speaker):
     return "bark.wav"
 
 
-def init_tortoise(use_deepspeed, kv_cache, half):
-    tts = TextToSpeech(use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half)
+def init_tortoise(use_deepspeed, kv_cache, half, num_autoregressive_samples):
+    tts = TextToSpeech(use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half,autoregressive_batch_size=num_autoregressive_samples)
     return tts
-
+        
 def generate_tortoise(text_input, tts, diffusion_iterations, num_autoregressive_samples, temperature, CUSTOM_VOICE_NAME):
     extra_voice_dirs = ["voices"]
     voice_samples, conditioning_latents = load_voice(CUSTOM_VOICE_NAME, extra_voice_dirs=extra_voice_dirs)
-    
-    # split text into chunks because of tortoise limitations
-    texts = split_and_recombine_text(text_input)
 
-    # generate audio parts and combine them
-    audio_parts = []
-    for text in texts:
-        print(text)
-        gen = tts.tts_with_preset(text,
-                            voice_samples=voice_samples,
-                            conditioning_latents=conditioning_latents, 
-                            preset="fast",
-                            diffusion_iterations=diffusion_iterations,
-                            num_autoregressive_samples=num_autoregressive_samples, 
-                            cond_free = True, 
-                            temperature=temperature)
-        audio_parts.append(gen.squeeze(0).cpu())
-    print("Audio generated")
-    audio = torch.cat(audio_parts, dim=-1)
-    torchaudio.save(f'tortoise.wav', audio, 24000)
+    gen = tts.tts_with_preset(text_input,
+                    voice_samples=voice_samples,
+                    conditioning_latents=conditioning_latents, 
+                    preset="fast",
+                    diffusion_iterations=diffusion_iterations,
+                    num_autoregressive_samples=num_autoregressive_samples, 
+                    cond_free = True, 
+                    temperature=temperature)
+    
+    # Create a temporary WAV file to save the generated audio
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        torchaudio.save(temp_file, gen.squeeze(0).cpu(), 24000, format="wav")
+        temp_file_path = temp_file.name  # Store the temporary file path
+
+    return temp_file_path
+
+def audio_combine(audio_parts):
+    # Initialize a list to store audio tensors
+
+    audio_tensors = []
+
+    for file in audio_parts:
+        waveform, sample_rate = torchaudio.load(file, normalize=True)
+        audio_tensors.append(waveform)
+
+    combined_audio_tensor = torch.cat(audio_tensors, dim=1)
+    torchaudio.save(f'tortoise.wav', combined_audio_tensor, sample_rate)
     return f'tortoise.wav'
-        
