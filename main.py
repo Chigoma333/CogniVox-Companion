@@ -13,7 +13,7 @@ import sys
 # Import custom functions from the oogabooga library
 from oogabooga import init_llm, generate_llm
 from speech2text import init_whisper, generate_whisper
-from text2speech import init_bark, generate_bark, init_tortoise, generate_tortoise, audio_combine
+from text2speech import init_bark, generate_bark, init_tortoise, generate_tortoise, audio_combine, init_emotion, get_emotion
 
 import tempfile
 from tortoise.utils.text import split_and_recombine_text
@@ -46,6 +46,8 @@ tortoise_use_deepspeed = eval(os.environ.get("TORTOISE_USE_DEEPSPEED", "False"))
 tortoise_kv_cache = eval(os.environ.get("TORTOISE_KV_CACHE", "True"))
 tortoise_half = eval(os.environ.get("TORTOISE_HALF", "True"))
 
+use_emotion = os.environ.get("USE_EMOTION", "1")
+
 discord_token = os.environ.get("DISCORD_TOKEN")
 
 
@@ -73,6 +75,13 @@ if use_bark == "1":
 
 if use_tortoise == "1":
     tortoise_tts = init_tortoise(tortoise_use_deepspeed, tortoise_kv_cache, tortoise_half, tortoise_num_autoregressive_samples)
+
+if use_emotion == "1":
+    if use_tortoise == "1" or use_bark == "1":
+        text2emotion = init_emotion()
+    else:
+        print("Tortoise or Bark must be enabled because emotion detection is used for them exclusively exept in generate_emotion_test")
+        sys.exit()
 
 bot = discord.Bot(intents=intents)
 connectet_voice_channel = None
@@ -221,7 +230,20 @@ async def generate_tortoise_test(ctx, text: str=None):
         await response.edit_original_response(file=discord.File(file))
     else:
         await ctx.respond("Tortoise is disabled")
-    
+
+@bot.command(description="Generate emotion from text")
+async def generate_emotion_test(ctx, text: str=None):
+    if use_emotion == "1":
+        if use_tortoise == "1" or use_bark == "1":
+            response = await ctx.respond(f"Generating emotion from text")
+            if text is None:
+                text = "Hello this is a emotion generation test."
+            emotion = get_emotion(text, text2emotion)
+            await response.followup.send(str(emotion))
+        else:
+            await ctx.respond("Tortoise or Bark must be enabled because emotion detection is used for them exclusively exept in generate_emotion_test")
+    else:
+        await ctx.respond("Emotion is disabled")
 
 
 async def generate_llm_thread(llm_chain, content):
@@ -254,14 +276,23 @@ async def generate_tts_thread(text):
 
     running_task_tts = True
 
+
+    emotion = get_emotion(text, text2emotion)
+    len_emotion = len(emotion)
+
+
     # Use ThreadPoolExecutor to run the synchronous function in a separate thread
     # This prevents the event loop from being blocked during the time-consuming task
     with ThreadPoolExecutor() as executor:
         if use_tortoise == "1":
-            #result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
-            texts = split_and_recombine_text(text)
+
+            #200 and 300 are the standard values set by tortoise
+            desired_length = 200 - len_emotion
+            max_length = 300 - len_emotion
+            texts = split_and_recombine_text(text, desired_length=desired_length, max_length=max_length)
             audio_parts = []
             for text in texts:
+                text = emotion + text
                 result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
                 await play_audio(result)
                 audio_parts.append(result)
@@ -271,6 +302,7 @@ async def generate_tts_thread(text):
 
 
         if use_bark == "1":
+            text = emotion + text
             result = await bot.loop.run_in_executor(executor, generate_bark, text, bark_speaker)
             await play_audio(result)
 

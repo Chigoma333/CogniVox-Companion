@@ -1,12 +1,14 @@
 from bark import SAMPLE_RATE, generate_audio, preload_models
 from scipy.io.wavfile import write as write_wav
-import tempfile
 
 import torch
 import torchaudio
 from tortoise.api import TextToSpeech
 from tortoise.utils.audio import load_voice
+import tempfile
 
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import pipeline
 
 
 # download and load all models
@@ -22,12 +24,14 @@ def generate_bark(text_prompt, speaker):
 
 
 def init_tortoise(use_deepspeed, kv_cache, half, num_autoregressive_samples):
-    tts = TextToSpeech(use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half,autoregressive_batch_size=num_autoregressive_samples)
+    tts = TextToSpeech(use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half, autoregressive_batch_size=num_autoregressive_samples)
     return tts
         
 def generate_tortoise(text_input, tts, diffusion_iterations, num_autoregressive_samples, temperature, CUSTOM_VOICE_NAME):
     extra_voice_dirs = ["voices"]
     voice_samples, conditioning_latents = load_voice(CUSTOM_VOICE_NAME, extra_voice_dirs=extra_voice_dirs)
+
+    print(text_input)
 
     gen = tts.tts_with_preset(text_input,
                     voice_samples=voice_samples,
@@ -57,3 +61,14 @@ def audio_combine(audio_parts):
     combined_audio_tensor = torch.cat(audio_tensors, dim=1)
     torchaudio.save(f'tortoise.wav', combined_audio_tensor, sample_rate)
     return f'tortoise.wav'
+
+def init_emotion():
+    tokenizer = AutoTokenizer.from_pretrained("bergum/xtremedistil-l6-h384-go-emotion")
+    model = AutoModelForSequenceClassification.from_pretrained("bergum/xtremedistil-l6-h384-go-emotion")
+    return pipeline("text-classification", model=model, tokenizer=tokenizer)
+
+def get_emotion(text_input, nlp):
+    result = nlp(text_input)
+    emotion_label = result[0]['label']
+    return f"[{emotion_label}] "
+    
