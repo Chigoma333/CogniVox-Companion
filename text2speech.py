@@ -19,8 +19,10 @@ def generate_bark(text_prompt, speaker):
     print("Speaker: " + str(speaker))
     audio_array = generate_audio(text_prompt, history_prompt=speaker)
     print("Audio generated")
-    write_wav("bark.wav", SAMPLE_RATE, audio_array)
-    return "bark.wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        write_wav(temp_file, SAMPLE_RATE, audio_array)
+        temp_file_path = temp_file.name
+    return temp_file_path
 
 
 def init_tortoise(use_deepspeed, kv_cache, half, num_autoregressive_samples):
@@ -59,8 +61,11 @@ def audio_combine(audio_parts):
         audio_tensors.append(waveform)
 
     combined_audio_tensor = torch.cat(audio_tensors, dim=1)
-    torchaudio.save(f'tortoise.wav', combined_audio_tensor, sample_rate)
-    return f'tortoise.wav'
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        torchaudio.save(temp_file, combined_audio_tensor, sample_rate, format="wav")
+        temp_file_path = temp_file.name
+    
+    return temp_file_path
 
 def init_emotion():
     tokenizer = AutoTokenizer.from_pretrained("bergum/xtremedistil-l6-h384-go-emotion")
@@ -70,5 +75,5 @@ def init_emotion():
 def get_emotion(text_input, nlp):
     result = nlp(text_input)
     emotion_label = result[0]['label']
-    return f"[{emotion_label}] "
+    return emotion_label
     

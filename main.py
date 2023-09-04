@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord.utils import get
 import argparse
+from collections import deque
 
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
@@ -14,12 +15,10 @@ import sys
 from oogabooga import init_llm, generate_llm
 from speech2text import init_whisper, generate_whisper
 from text2speech import init_bark, generate_bark, init_tortoise, generate_tortoise, audio_combine, init_emotion, get_emotion
+from udp_server import init_udp_server, udp_server
 
 import tempfile
 from tortoise.utils.text import split_and_recombine_text
-
-running_task_llm = False
-running_task_tts = False
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--reboot", action="store", help="Helper for rebooting the bot (message_id) (don't use this except you are a bot)")
@@ -48,7 +47,10 @@ tortoise_half = eval(os.environ.get("TORTOISE_HALF", "True"))
 
 use_emotion = os.environ.get("USE_EMOTION", "1")
 
+use_unity = os.environ.get("USE_UNITY", "0")
+
 discord_token = os.environ.get("DISCORD_TOKEN")
+
 
 
 with open("discord_info.txt", "r") as file:
@@ -82,6 +84,9 @@ if use_emotion == "1":
     else:
         print("Tortoise or Bark must be enabled because emotion detection is used for them exclusively exept in generate_emotion_test")
         sys.exit()
+
+if use_unity == "1":
+    init_udp_server()
 
 bot = discord.Bot(intents=intents)
 connectet_voice_channel = None
@@ -160,7 +165,7 @@ async def on_message(message):
     await response_msg.edit(content=result)
 
     if use_tortoise == "1" or use_bark == "1":
-        audio_file = await generate_tts_thread(result)
+        audio_file = await generate_tts(result)
         await response_msg.edit(file=discord.File(audio_file))
 
 
@@ -204,7 +209,7 @@ async def generate_bark_test(ctx, text: str=None):
         response = await ctx.respond(f"Generating audio from text")
         if text is None:
             text = "Hello this is a bark generation test."
-        file = await generate_tts_thread(text)
+        file = await generate_tts(text)
         await response.edit_original_response(file=discord.File(file))
     else:
         await ctx.respond("Bark generation is disabled")
@@ -226,7 +231,7 @@ async def generate_tortoise_test(ctx, text: str=None):
         response = await ctx.respond(f"Generating audio from text")
         if text is None:
             text = "Hello this is a tortoise generation test."
-        file = await generate_tts_thread(text)
+        file = await generate_tts(text)
         await response.edit_original_response(file=discord.File(file))
     else:
         await ctx.respond("Tortoise is disabled")
@@ -234,98 +239,97 @@ async def generate_tortoise_test(ctx, text: str=None):
 @bot.command(description="Generate emotion from text")
 async def generate_emotion_test(ctx, text: str=None):
     if use_emotion == "1":
-        if use_tortoise == "1" or use_bark == "1":
-            response = await ctx.respond(f"Generating emotion from text")
-            if text is None:
-                text = "Hello this is a emotion generation test."
-            emotion = get_emotion(text, text2emotion)
-            await response.followup.send(str(emotion))
-        else:
-            await ctx.respond("Tortoise or Bark must be enabled because emotion detection is used for them exclusively exept in generate_emotion_test")
+        response = await ctx.respond(f"Generating emotion from text")
+        if text is None:
+            text = "Hello this is a emotion generation test."
+        emotion = get_emotion(text, text2emotion)
+        await response.followup.send(str(emotion))
     else:
         await ctx.respond("Emotion is disabled")
 
 
+
+semaphore_llm = asyncio.Semaphore(1)
+
 async def generate_llm_thread(llm_chain, content):
-    global running_task_llm
+    global semaphore_llm
 
-    # Add the incoming request to the queue
-
-    # If a task is already running, wait for it to finish
-    while running_task_llm:
-        await asyncio.sleep(1)  # Adjust the sleep duration as needed
-
-    running_task_llm = True
-
-    # Use ThreadPoolExecutor to run the synchronous function in a separate thread
-    # This prevents the event loop from being blocked during the time-consuming task
-    with ThreadPoolExecutor() as executor:
-        result = await bot.loop.run_in_executor(executor, generate_llm, llm_chain, content)
-
-    running_task_llm = False
+    # Use a semaphore to ensure that only one thread is running this function at a time and to maintain the order of requests
+    async with semaphore_llm:
+        # Use ThreadPoolExecutor to run the synchronous function in a separate thread
+        # This prevents the event loop from being blocked during the time-consuming task
+        with ThreadPoolExecutor() as executor:
+            result = await bot.loop.run_in_executor(executor, generate_llm, llm_chain, content)
+ 
     return result
 
-async def generate_tts_thread(text):
-    global running_task_tts
 
-    # Add the incoming request to the queue
+semaphore_tts = asyncio.Semaphore(1)
 
-    # If a task is already running, wait for it to finish
-    while running_task_tts:
-        await asyncio.sleep(1)  # Adjust the sleep duration as needed
+async def generate_tts(text):
+    global semaphore_tts
 
-    running_task_tts = True
+    # Use a semaphore to ensure that only one thread is running this function at a time and to maintain the order of requests
+    async with semaphore_tts:
 
+        emotion = None
 
-    emotion = get_emotion(text, text2emotion)
-    len_emotion = len(emotion)
+        if use_emotion == "1":
+            emotion = get_emotion(text, text2emotion)
+            emotion_tts = f"[{emotion}] "
+            len_emotion = len(emotion_tts)
 
+        # Use ThreadPoolExecutor to run the synchronous function in a separate thread
+        # This prevents the event loop from being blocked during the time-consuming task
+        with ThreadPoolExecutor() as executor:
+            if use_tortoise == "1":
+                max_length = 300
+                desired_length = 200
+                if use_emotion == "1":
+                    desired_length = desired_length - len_emotion
+                    max_length = max_length - len_emotion
+                texts = split_and_recombine_text(text, desired_length=desired_length, max_length=max_length)
+                audio_parts = []
+                for text in texts:
+                    if use_emotion == "1":
+                        text = emotion_tts + text
+                    result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
+                    await play_audio(result, emotion)
+                    audio_parts.append(result)
 
-    # Use ThreadPoolExecutor to run the synchronous function in a separate thread
-    # This prevents the event loop from being blocked during the time-consuming task
-    with ThreadPoolExecutor() as executor:
-        if use_tortoise == "1":
+                result = audio_combine(audio_parts)
 
-            #200 and 300 are the standard values set by tortoise
-            desired_length = 200 - len_emotion
-            max_length = 300 - len_emotion
-            texts = split_and_recombine_text(text, desired_length=desired_length, max_length=max_length)
-            audio_parts = []
-            for text in texts:
-                text = emotion + text
-                result = await bot.loop.run_in_executor(executor, generate_tortoise, text, tortoise_tts, tortoise_diffusion_iterations, tortoise_num_autoregressive_samples, tortoise_temperature, tortoise_voice)
-                await play_audio(result)
-                audio_parts.append(result)
+            if use_bark == "1":
+                if use_emotion == "1":
+                    text = emotion_tts + text
+                result = await bot.loop.run_in_executor(executor, generate_bark, text, bark_speaker)
+                await play_audio(result, emotion)
 
-            result = audio_combine(audio_parts)
-
-
-
-        if use_bark == "1":
-            text = emotion + text
-            result = await bot.loop.run_in_executor(executor, generate_bark, text, bark_speaker)
-            await play_audio(result)
-
-        
-    running_task_tts = False
     return result
 
-audio_queue = []
+audio_queue = deque()
 
-async def play_audio(audio_file):
+async def play_audio(audio_file, emotion=None):
     global connectet_voice_channel
     global audio_queue
-    
-    audio_queue.append(audio_file)
-    
-    if connectet_voice_channel != None:
-        while connectet_voice_channel.is_playing():
-            await asyncio.sleep(1)
-        
-        audio_file = audio_queue.pop(0)
-        connectet_voice_channel.play(discord.FFmpegPCMAudio(audio_file))
-        
 
+    if connectet_voice_channel is not None:
+    
+        if audio_file:  # Check if both audio_file and emotion are provided
+            # Add the audio file to the queue
+            audio_queue.append((audio_file, emotion))
+    
+        if not connectet_voice_channel.is_playing() and audio_queue:
+            # If the voice channel is not currently playing audio and the queue is not empty, start playback
+            audio_file, emotion = audio_queue.popleft()
+            if use_unity == "1" and emotion:
+                udp_server(emotion)
+            connectet_voice_channel.play(discord.FFmpegPCMAudio(audio_file), after=on_audio_complete)
 
+def on_audio_complete(_):
+    # This function is called when audio playback is complete
+    asyncio.run(play_audio("", ""))  # Continue playing the next audio, pass appropriate audio file and emotion
+
+        
 
 bot.run(discord_token)

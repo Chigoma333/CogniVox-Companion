@@ -49,3 +49,7 @@ TORTOISE_HALF = "True"
 
 #use emotion detection on generated text [0/1]
 USE_EMOTION = "1"
+
+
+#use unity [0/1]
+USE_UNITY = "0"
