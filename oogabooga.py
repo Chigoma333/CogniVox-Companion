@@ -1,5 +1,6 @@
+from typing import Any, Dict
 import langchain
-from langchain import PromptTemplate, LLMChain
+from langchain import PromptTemplate, ConversationChain
 from langchain.llms import TextGen
 from langchain.memory import ConversationSummaryBufferMemory, VectorStoreRetrieverMemory, CombinedMemory
 
@@ -9,21 +10,67 @@ import json
 import os
 from pathlib import Path
 
-from langchain.embeddings import GPT4AllEmbeddings
+from langchain.embeddings import HuggingFaceBgeEmbeddings
+
+VectorMemory = None
+
+class CustomVectorStoreRetrieverMemory(VectorStoreRetrieverMemory):
+
+    def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
+        return
+    
+    def save_context_new(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
+        
+        #Move short term memory to long term memory
+        documents = self._form_documents(inputs, outputs)
+        self.retriever.add_documents(documents)
+
+#if ConversationSummaryBufferMemory calls Summary then save the input and output into CustomConversationSummaryBufferMemory    
+class CustomConversationSummaryBufferMemory(ConversationSummaryBufferMemory):
+
+    def prune(self) -> None:
+        """Prune buffer if it exceeds max token limit"""
+        buffer = self.chat_memory.messages
+        curr_buffer_length = self.llm.get_num_tokens_from_messages(buffer)
+        if curr_buffer_length > self.max_token_limit:
+            pruned_memory = []
+            while curr_buffer_length > self.max_token_limit:
+                human_removed_element = buffer.pop(0)
+                ai_removed_element = buffer.pop(0)
+
+
+                print("Human removed element: " + human_removed_element.content)
+                VectorMemory.save_context_new({"input": human_removed_element.content}, {"response": ai_removed_element.content})
+
+                pruned_memory.append(human_removed_element)
+                pruned_memory.append(ai_removed_element)
+                curr_buffer_length = self.llm.get_num_tokens_from_messages(buffer)
+            self.moving_summary_buffer = self.predict_new_summary(
+                pruned_memory, self.moving_summary_buffer
+            )
+
 
 def init_embeddings():
+
+    global VectorMemory
+
     # Initialize GPT4AllEmbeddings for language model embeddings
-    gpt4all_embd = GPT4AllEmbeddings()
+    bge_embd = HuggingFaceBgeEmbeddings(
+        model_name="BAAI/bge-small-en-v1.5"
+    )
 
     # Create a Chroma vector store with the GPT4All embeddings  and set the directory of the database to db
-    vectorstore = Chroma(persist_directory="db", embedding_function=gpt4all_embd)
+    vectorstore = Chroma(persist_directory="db", embedding_function=bge_embd)
 
     # Persist the vector store to disk for future usage
     vectorstore.persist()
 
-    retriever = vectorstore.as_retriever(search_kwargs=dict(k=1))
-    memory = VectorStoreRetrieverMemory(retriever=retriever, memory_key="chromadb", input_key="human_input", exclude_input_keys = ["chat_history"])
+    retriever = vectorstore.as_retriever(search_kwargs=dict(k=4))
+    memory = CustomVectorStoreRetrieverMemory(retriever=retriever, memory_key="chromadb", input_key="input", exclude_input_keys = ["chat_history"])
+
+    VectorMemory = memory
     return memory
+     
      
 
 def init_llm(model_url, debug):
@@ -70,7 +117,7 @@ def init_llm(model_url, debug):
 
     
 
-    llm_chain = LLMChain(
+    llm_chain = ConversationChain(
         llm=llm, 
         memory=memory,
         prompt=prompt,
@@ -84,7 +131,7 @@ def init_llm(model_url, debug):
 def generate_llm(llm_chain, user_input):
     # Run the provided input through the LLMChain to generate a response
 
-    Output = llm_chain.run(human_input=user_input)
+    Output = llm_chain.predict(human_input=user_input)
 
     #Save the short term memory to files
 
